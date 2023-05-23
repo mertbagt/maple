@@ -1,10 +1,6 @@
 import {
-  CurrentRefinements,
-  Hits,
   InstantSearch,
-  Pagination,
-  SearchBox,
-  useInstantSearch
+  Pagination
 } from "@alexjball/react-instantsearch-hooks-web"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import ErrorPage from "next/error"
