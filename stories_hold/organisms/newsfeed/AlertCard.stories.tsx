@@ -1,7 +1,7 @@
 import { ComponentStory } from "@storybook/react"
 import React, { useState } from "react"
 import { createMeta } from "stories/utils"
-import { AlertCard } from "components/AlertCard/AlertCard"
+import { AlertCard } from "components/NewsfeedCard/NewsfeedCard"
 import { Timestamp } from "firebase/firestore"
 
 export default createMeta({
