@@ -17,6 +17,15 @@ export const FilterButton = styled(Button)`
   align-self: flex-start;
 `
 
+export const TooltipWrapper = styled.div`
+  position: relative;
+`
+
+export const Tooltip = styled(Button)`
+  position: absolute;
+  left: -50px;
+`
+
 const useHasRefinements = () => {
   const { results } = useInstantSearch()
   const refinements = results.getRefinements()
@@ -77,7 +86,10 @@ export const useRefinements = ({
       <>
         <div>{hierarchicalMenu}</div>
         <div>{refinements1}</div>
-        <div>test</div>
+        <TooltipWrapper>
+          <Tooltip>test</Tooltip>
+        </TooltipWrapper>
+
         <div>{refinements2}</div>
       </>
     ) : (
