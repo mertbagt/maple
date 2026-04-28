@@ -26,8 +26,7 @@ export const Status = ({ bill }: BillProps) => {
   const history = last(bill.history)
   const today = new Date().toISOString()
 
-  // target1 and target2 are only used internally and never shown to the User
-  // as such they are not translated at this time
+  // revisit this when we revisit translations for the backend
   const target1 = "Hearing scheduled for "
   const target2 = "Hearing rescheduled to "
 
