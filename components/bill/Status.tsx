@@ -25,6 +25,9 @@ export const Status = ({ bill }: BillProps) => {
   const handleCloseBillHistory = () => setShowBillHistory(false)
   const history = last(bill.history)
   const today = new Date().toISOString()
+
+  // target1 and target2 are only used internally and never shown to the User
+  // as such they are not translated at this time
   const target1 = "Hearing scheduled for "
   const target2 = "Hearing rescheduled to "
 
