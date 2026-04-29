@@ -44,7 +44,8 @@ abstract class EventScraper<ListItem, Event extends BaseEvent> {
     return runWith({
       timeoutSeconds: this.timeout,
       secrets: ["ASSEMBLY_API_KEY"],
-      memory: this.memory
+      memory: this.memory,
+      maxInstances: 1
     })
       .pubsub.schedule(this.schedule)
       .onRun(() => this.run())
