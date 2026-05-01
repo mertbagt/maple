@@ -1,12 +1,11 @@
 import { useTranslation } from "next-i18next"
 import { useEffect, useState } from "react"
 import { Spinner } from "react-bootstrap"
-import { useAuth } from "components/auth"
-import { createPage } from "components/page"
-import { ProfilePage } from "components/ProfilePage"
-import { createGetStaticTranslationProps } from "components/translations"
 
+import { useAuth } from "components/auth"
 import { LegislatorPage } from "components/legislator"
+import { createPage } from "components/page"
+import { createGetStaticTranslationProps } from "components/translations"
 
 export default createPage({
   titleI18nKey: "navigation.legislator",
@@ -22,12 +21,8 @@ export default createPage({
             <Spinner animation={"border"} />
           </div>
         ) : !loading && !id && authenticated ? (
-          // <ProfilePage id={user!.uid} />
-          // t("test2")
           <LegislatorPage id={user!.uid} />
         ) : id ? (
-          // <ProfilePage id={id} />
-          // t("test2")
           <LegislatorPage id={id} />
         ) : (
           <div>{t("noUser")}</div>
