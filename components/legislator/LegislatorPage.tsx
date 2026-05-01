@@ -17,6 +17,7 @@ import {
 import { Banner } from "../shared/StyledSharedComponents"
 import ViewTestimony from "../TestimonyCard/ViewTestimony"
 
+import { LegislatorSidebar } from "./SidebarComponents/LegislatorSidebar"
 //import { OrgContactInfo } from "./OrgContactInfo"
 //import { ProfileAboutSection } from "./ProfileAboutSection"
 //import { ProfileHeader } from "./ProfileHeader"
@@ -101,7 +102,7 @@ export function LegislatorPage(props: { id: string }) {
           Tabs
         </Col>
         <Col className={`mt-4`} md="3">
-          Sidebar
+          <LegislatorSidebar />
         </Col>
       </Row>
     </Container>
