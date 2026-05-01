@@ -25,11 +25,10 @@ import ViewTestimony from "../TestimonyCard/ViewTestimony"
 
 import { useFlags } from "components/featureFlags"
 import { firestore } from "components/firebase"
-import { PendingUpgradeBanner } from "components/PendingUpgradeBanner"
-import { FollowContext, OrgFollowStatus } from "components/shared/FollowContext"
-import { VerifyAccountSection } from "components/shared"
-
 import { Internal } from "components/links"
+import { PendingUpgradeBanner } from "components/PendingUpgradeBanner"
+import { VerifyAccountSection } from "components/shared"
+import { FollowContext, OrgFollowStatus } from "components/shared/FollowContext"
 
 const DirectoryPath = styled.div`
   font-size: 12px;
@@ -43,7 +42,7 @@ const HeaderBlock = styled.div`
   padding: 16px;
 `
 
-const StatBlock = styled.div`
+const StatBlock = styled(Col)`
   background-color: white;
   border: 1px #ced4da solid;
   border-radius: 5px;
@@ -83,11 +82,28 @@ export function LegislatorPage(props: { id: string }) {
       <HeaderBlock className="">Header Info Goes Here</HeaderBlock>
 
       <div className="d-flex flex-wrap gap-2 justify-content-between mt-2">
-        <StatBlock className="col-4 col-md-2 flex-grow-1">Stat</StatBlock>
-        <StatBlock className="col-4 col-md-2 flex-grow-1">Info</StatBlock>
-        <StatBlock className="col-4 col-md-2 flex-grow-1">Goes</StatBlock>
-        <StatBlock className="col-4 col-md-2 flex-grow-1">Here</StatBlock>
+        <StatBlock className="col-4 flex-grow-1" md="2">
+          Stat
+        </StatBlock>
+        <StatBlock className="col-4 flex-grow-1" md="2">
+          Info
+        </StatBlock>
+        <StatBlock className="col-4 flex-grow-1" md="2">
+          Goes
+        </StatBlock>
+        <StatBlock className="col-4 flex-grow-1" md="2">
+          Here
+        </StatBlock>
       </div>
+
+      <Row>
+        <Col className={`mt-4`} md="9">
+          Tabs
+        </Col>
+        <Col className={`mt-4`} md="3">
+          Sidebar
+        </Col>
+      </Row>
     </Container>
   )
 }
