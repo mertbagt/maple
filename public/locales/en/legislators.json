@@ -1,6 +1,15 @@
 {
   "home": "Home",
   "legislators": "Legislators",
+  "tabs": {
+    "bills": "Bills",
+    "district": "District",
+    "elections": "Elections",
+    "finance": "Finance",
+    "priorities": "Priorities",
+    "testimony": "Testimony",
+    "votes": "Votes"
+  },
   "test": "Test",
   "test2": "Hello World"    
 }

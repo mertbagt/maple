@@ -1,0 +1,95 @@
+import { useTranslation } from "next-i18next"
+import { TabPane } from "react-bootstrap"
+import TabContainer from "react-bootstrap/TabContainer"
+
+import { Container, Row, Spinner } from "../../bootstrap"
+
+import { Bills } from "./Bills"
+import { District } from "./District"
+import { Elections } from "./Elections"
+import { Finance } from "./Finance"
+import { Priorities } from "./Priorities"
+import { Testimony } from "./Testimony"
+import { Votes } from "./Votes"
+
+import {
+  StyledTabContent,
+  TabNavItem,
+  TabNavWrapper
+} from "components/EditProfilePage/StyledEditProfileComponents"
+
+const tabCategory = [
+  "priorities",
+  "bills",
+  "elections",
+  "finance",
+  "district",
+  "testimony",
+  "votes"
+]
+type TabCategories = (typeof tabCategory)[number]
+
+export function LegislatorTabs({
+  tabCategory
+}: {
+  tabCategory?: TabCategories
+}) {
+  const { t } = useTranslation("legislators")
+
+  const tabs = [
+    {
+      title: t("tabs.priorities"),
+      eventKey: "priorities",
+      content: <Priorities />
+    },
+    {
+      title: t("tabs.bills"),
+      eventKey: "bills",
+      content: <Bills />
+    },
+    {
+      title: t("tabs.elections"),
+      eventKey: "elections",
+      content: <Elections />
+    },
+    {
+      title: t("tabs.finance"),
+      eventKey: "finance",
+      content: <Finance />
+    },
+    {
+      title: t("tabs.district"),
+      eventKey: "district",
+      content: <District />
+    },
+    {
+      title: t("tabs.testimony"),
+      eventKey: "testimony",
+      content: <Testimony />
+    },
+    {
+      title: t("tabs.votes"),
+      eventKey: "votes",
+      content: <Votes />
+    }
+  ]
+
+  return (
+    <Container>
+      <TabContainer defaultActiveKey="priorities" activeKey={tabCategory}>
+        <TabNavWrapper>
+          {tabs.map((t, i) => (
+            <TabNavItem key={i} tab={t} i={i} />
+          ))}
+        </TabNavWrapper>
+        <StyledTabContent>
+          {tabs.map(t => (
+            <TabPane key={t.eventKey} title={t.title} eventKey={t.eventKey}>
+              {t.content}
+            </TabPane>
+          ))}
+        </StyledTabContent>
+      </TabContainer>
+    </Container>
+  )
+}
