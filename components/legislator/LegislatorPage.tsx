@@ -19,11 +19,6 @@ import ViewTestimony from "../TestimonyCard/ViewTestimony"
 
 import { LegislatorSidebar } from "./SidebarComponents/LegislatorSidebar"
 import { LegislatorTabs } from "./TabComponents/LegislatorTabs"
-//import { OrgContactInfo } from "./OrgContactInfo"
-//import { ProfileAboutSection } from "./ProfileAboutSection"
-//import { ProfileHeader } from "./ProfileHeader"
-//import { ProfileLegislators } from "./ProfileLegislators"
-//import { VerifyAccountSectionLegacy } from "./VerifyAccountSectionLegacy"
 
 import { useFlags } from "components/featureFlags"
 import { firestore } from "components/firebase"
@@ -50,6 +45,17 @@ const StatBlock = styled(Col)`
   border-radius: 5px;
   margin-top: 4px;
   padding: 16px;
+`
+
+const StatLine = styled(Row)`
+  font-size: 12px;
+`
+
+const StatNum = styled.div`
+  color: #1a3185;
+  font-size: 22px;
+  font-weight: 700;
+  width: max-content;
 `
 
 export function LegislatorPage(props: { id: string }) {
@@ -84,17 +90,29 @@ export function LegislatorPage(props: { id: string }) {
       <HeaderBlock className="">Header Info Goes Here</HeaderBlock>
 
       <div className="d-flex flex-wrap gap-2 justify-content-between mt-2">
-        <StatBlock className="col-4 flex-grow-1" md="2">
-          Stat
+        <StatBlock className="d-flex col-4 flex-grow-1" md="2">
+          <Col className="flex-grow-0 mx-auto">
+            <StatNum className="mx-auto">?</StatNum>
+            <StatLine className="text-nowrap">{t("termsServed")}</StatLine>
+          </Col>
         </StatBlock>
-        <StatBlock className="col-4 flex-grow-1" md="2">
-          Info
+        <StatBlock className="d-flex col-4 flex-grow-1" md="2">
+          <Col className="flex-grow-0 mx-auto">
+            <StatNum className="mx-auto">?</StatNum>
+            <StatLine className="text-nowrap">{t("billsSponsored")}</StatLine>
+          </Col>
         </StatBlock>
-        <StatBlock className="col-4 flex-grow-1" md="2">
-          Goes
+        <StatBlock className="d-flex col-4 flex-grow-1" md="2">
+          <Col className="flex-grow-0 mx-auto">
+            <StatNum className="mx-auto">?</StatNum>
+            <StatLine className="text-nowrap">{t("cosponsored")}</StatLine>
+          </Col>
         </StatBlock>
-        <StatBlock className="col-4 flex-grow-1" md="2">
-          Here
+        <StatBlock className="d-flex col-4 flex-grow-1" md="2">
+          <Col className="flex-grow-0 mx-auto">
+            <StatNum className="mx-auto">?</StatNum>
+            <StatLine className="text-nowrap">{t("fundsRaised")}</StatLine>
+          </Col>
         </StatBlock>
       </div>
 

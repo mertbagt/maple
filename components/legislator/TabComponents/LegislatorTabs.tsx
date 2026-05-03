@@ -1,8 +1,9 @@
 import { useTranslation } from "next-i18next"
 import { TabPane } from "react-bootstrap"
 import TabContainer from "react-bootstrap/TabContainer"
+import styled from "styled-components"
 
-import { Container, Nav, Row, Spinner } from "../../bootstrap"
+import { Container, Nav } from "../../bootstrap"
 
 import { Bills } from "./Bills"
 import { District } from "./District"
@@ -14,10 +15,9 @@ import { Votes } from "./Votes"
 
 import {
   StyledTabContent,
-  TabNavWrapper
+  TabNavWrapper,
+  TabType
 } from "components/EditProfilePage/StyledEditProfileComponents"
-
-import styled from "styled-components"
 
 const tabCategory = [
   "priorities",
@@ -29,6 +29,38 @@ const tabCategory = [
   "votes"
 ]
 type TabCategories = (typeof tabCategory)[number]
+
+const TabNavLink = styled(Nav.Link).attrs(props => ({
+  className: `rounded-top m-0 p-0 ${props.className}`
+}))`
+  color: #6c757d;
+
+  &.active {
+    color: #1a3185;
+    font-weight: bold;
+  }
+`
+
+const TabNavItem = ({
+  tab,
+  i: i,
+  className
+}: {
+  tab: TabType
+  i: number
+  className?: string
+}) => {
+  return (
+    <Nav.Item className={`flex-lg-fill ${className}`} key={tab.eventKey}>
+      <TabNavLink eventKey={tab.eventKey} className={`rounded-top m-0 p-0`}>
+        <p className={`fs-6 my-0 text-nowrap ${i === 0 ? "" : "mx-4"}`}>
+          {tab.title}
+        </p>
+        <hr className={`my-0`} />
+      </TabNavLink>
+    </Nav.Item>
+  )
+}
 
 export function LegislatorTabs({
   tabCategory
@@ -92,39 +124,5 @@ export function LegislatorTabs({
         </StyledTabContent>
       </TabContainer>
     </Container>
-  )
-}
-
-type TabType = { title: string; eventKey: string; content: JSX.Element }
-
-const TabNavLink = styled(Nav.Link).attrs(props => ({
-  className: `rounded-top m-0 p-0 ${props.className}`
-}))`
-  color: #6c757d;
-
-  &.active {
-    color: #1a3185;
-    font-weight: bold;
-  }
-`
-
-const TabNavItem = ({
-  tab,
-  i: i,
-  className
-}: {
-  tab: TabType
-  i: number
-  className?: string
-}) => {
-  return (
-    <Nav.Item className={`flex-lg-fill ${className}`} key={tab.eventKey}>
-      <TabNavLink eventKey={tab.eventKey} className={`rounded-top m-0 p-0`}>
-        <p className={`fs-6 my-0 text-nowrap ${i === 0 ? "" : "mx-4"}`}>
-          {tab.title}
-        </p>
-        <hr className={`my-0`} />
-      </TabNavLink>
-    </Nav.Item>
   )
 }

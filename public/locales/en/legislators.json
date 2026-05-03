@@ -1,4 +1,7 @@
 {
+  "billsSponsored": "Bills Sponsored",
+  "cosponsored": "Cosponsored",
+  "fundsRaised": "Funds Raised",
   "home": "Home",
   "legislators": "Legislators",
   "tabs": {
@@ -10,6 +13,5 @@
     "testimony": "Testimony",
     "votes": "Votes"
   },
-  "test": "Test",
-  "test2": "Hello World"    
+  "termsServed": "Terms Served"
 }
