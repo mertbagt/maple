@@ -7,6 +7,9 @@ jest.mock("../firebase", () => ({
   Timestamp: { now: () => ({}) }
 }))
 
+jest.mock("./forceGc", () => ({ forceGc: jest.fn() }))
+import { forceGc } from "./forceGc"
+
 const imports: any[][] = []
 jest.mock("./client", () => ({
   createClient: () => ({
@@ -25,24 +28,24 @@ jest.mock("./client", () => ({
   })
 }))
 
-/** A source that behaves like an ordered, cursor-paged Firestore query, keyed
- * by document path the way listPage's documentId() ordering is. `path`
+/** A source that behaves like an ordered, cursor-driven Firestore query, keyed
+ * by document path the way listBatch's documentId() ordering is. `path`
  * defaults to `id`; give docs distinct paths to model duplicated idField
  * values (the same bill number in several courts).
  */
 function fakeSource(docs: { id: string; body: string; path?: string }[]) {
   const pathOf = (d: { id: string; path?: string }) => d.path ?? d.id
-  const build = (startAfter: string | null, pageSize: number): any => ({
-    orderBy: () => build(startAfter, pageSize),
+  const build = (startAfter: string | null, limit: number): any => ({
+    orderBy: () => build(startAfter, limit),
     limit: (n: number) => build(startAfter, n),
-    startAfter: (cursor: { path: string }) => build(cursor.path, pageSize),
+    startAfter: (cursor: { path: string }) => build(cursor.path, limit),
     get: async () => {
       const rest =
         startAfter === null ? docs : docs.filter(d => pathOf(d) > startAfter)
-      const page = rest.slice(0, pageSize)
+      const batch = rest.slice(0, limit)
       return {
-        size: page.length,
-        docs: page.map(d => ({
+        size: batch.length,
+        docs: batch.map(d => ({
           exists: true,
           id: pathOf(d),
           ref: { path: pathOf(d) },
@@ -57,31 +60,36 @@ function fakeSource(docs: { id: string; body: string; path?: string }[]) {
 
 const pad = (n: number) => String(n).padStart(6, "0")
 
-const makeIndexer = (docs: { id: string; body: string }[]) =>
+const makeIndexer = (
+  docs: { id: string; body: string }[],
+  batchSize?: number
+) =>
   new SearchIndexer({
     alias: "widgets",
     schema: { fields: [{ name: "body", type: "string" }] },
     sourceCollection: fakeSource(docs) as any,
     documentTrigger: "widgets/{id}",
     idField: "id",
-    convert: (data: any) => ({ id: data.id, body: data.body })
+    convert: (data: any) => ({ id: data.id, body: data.body }),
+    batchSize
   } as CollectionConfig)
 
 beforeEach(() => {
   imports.length = 0
+  jest.mocked(forceGc).mockClear()
 })
 
-describe("importInSlices", () => {
+describe("importBatch", () => {
   const chunk = { startAfter: null, budgetMs: 60_000 }
 
-  it("imports a page that fits the byte budget in one call", async () => {
+  it("imports a batch that fits the byte budget in one call", async () => {
     const docs = [1, 2, 3].map(n => ({ id: pad(n), body: "x".repeat(1000) }))
     await makeIndexer(docs).backfillChunk(chunk)
     expect(imports).toHaveLength(1)
     expect(imports[0]).toHaveLength(3)
   })
 
-  it("splits a page on the byte boundary, not the document count", async () => {
+  it("splits a batch on the byte boundary, not the document count", async () => {
     // Three documents at 40% of the budget each: two fit, the third does not.
     const body = "x".repeat(Math.floor(IMPORT_BYTE_BUDGET * 0.4))
     const docs = [1, 2, 3].map(n => ({ id: pad(n), body }))
@@ -145,7 +153,7 @@ describe("backfillChunk", () => {
   it("resumes across a boundary that splits documents sharing an idField value", async () => {
     // Three source docs per idField value — a bill number appearing in three
     // general courts — with distinct paths. 250 is not a multiple of 3, so the
-    // page boundary lands inside a group; a value cursor on idField would skip
+    // batch boundary lands inside a group; a value cursor on idField would skip
     // the rest of that group on resume, where the path cursor does not.
     const grouped = Array.from({ length: 600 }, (_, n) => ({
       id: `H${pad(Math.floor(n / 3))}`,
@@ -163,6 +171,61 @@ describe("backfillChunk", () => {
       budgetMs: 60_000
     })
     expect(first.documents + resumed.documents).toBe(600)
+  })
+
+  it("reads batches at the size its config asks for", async () => {
+    const result = await makeIndexer(docs, 50).backfillChunk({
+      startAfter: null,
+      maxBatches: 1,
+      budgetMs: 60_000
+    })
+    expect(result.documents).toBe(50)
+    expect(result.cursor).toBe(pad(49))
+  })
+
+  it("reports the serialized size of everything it imported", async () => {
+    const body = "x".repeat(1000)
+    const result = await makeIndexer(
+      [1, 2, 3].map(n => ({ id: pad(n), body }))
+    ).backfillChunk({ startAfter: null, budgetMs: 60_000 })
+
+    // Exactly the JSONL the stub was handed: each line plus its newline.
+    const expected = imports
+      .flat()
+      .reduce((sum, d) => sum + Buffer.byteLength(JSON.stringify(d)) + 1, 0)
+    expect(result.bytes).toBe(expected)
+  })
+
+  /** The chunk total spans every batch, so it is the peak that says how much
+   * sits in memory at once — the number `batchSize` is chosen against. */
+  it("collects after every batch and reports resident memory", async () => {
+    const result = await makeIndexer(docs).backfillChunk({
+      startAfter: null,
+      budgetMs: 60_000
+    })
+    expect(result.batches).toBe(3)
+    expect(forceGc).toHaveBeenCalledTimes(3)
+    expect(result.peakRssBytes).toBeGreaterThan(0)
+    expect(result.peakRssAfterGcBytes).toBeGreaterThan(0)
+  })
+
+  it("reports the largest single batch, not just the chunk total", async () => {
+    const small = "x".repeat(1000)
+    const large = "x".repeat(50_000)
+    // 250 to a batch: the first batch is all small, the second holds the large.
+    const mixed = Array.from({ length: 300 }, (_, n) => ({
+      id: pad(n),
+      body: n < 250 ? small : large
+    }))
+
+    const result = await makeIndexer(mixed).backfillChunk({
+      startAfter: null,
+      budgetMs: 60_000
+    })
+    expect(result.batches).toBe(2)
+    expect(result.peakBatchBytes).toBeLessThan(result.bytes)
+    // The 50-document tail batch dwarfs the 250-document head batch.
+    expect(result.peakBatchBytes).toBeGreaterThan(result.bytes / 2)
   })
 
   it("counts documents that fail to convert without aborting the chunk", async () => {

@@ -12,16 +12,20 @@ import {
 import { BackfillConfig, upgradePath } from "./backfillRun"
 import { createClient } from "./client"
 import { searchCollectionName } from "./collectionName"
-import { CollectionConfig } from "./config"
+import { CollectionConfig, DEFAULT_BATCH_SIZE } from "./config"
+import { forceGc } from "./forceGc"
 import { Timestamp } from "../firebase"
 
-/** Ceiling on one `documents().import()` body, held far enough under the 10 MB
- * maximum payload of the AWS API Gateway HTTP API these collections sit behind
- * that headers and encoding cannot push a batch over it. A batch over the cap
- * is rejected outright and would fail the same way on every retry. Budgeting
- * the import by serialized bytes rather than by document count is what makes
- * that impossible: bills carry their full text in `body`, so a fixed count is
- * safe at the mean and unsafe in the tail.
+/** Ceiling on one `documents().import()` body — one slice, which is the unit
+ * `importBatch` ships and never the unit a budget counts: a batch is one whole
+ * read of the source, and a batch can flush several slices. Held far enough
+ * under the
+ * 10 MB maximum payload of the AWS API Gateway HTTP API these collections sit
+ * behind that headers and encoding cannot push a slice over it. A slice over
+ * the cap is rejected outright and would fail the same way on every retry.
+ * Budgeting the import by serialized bytes rather than by document count is
+ * what makes that impossible: bills carry their full text in `body`, so a
+ * fixed count is safe at the mean and unsafe in the tail.
  */
 export const IMPORT_BYTE_BUDGET = 6 * 1024 * 1024
 
@@ -29,9 +33,29 @@ export type BackfillChunkResult = {
   /** Document path the next chunk resumes `startAfter`, or null when the
    * source is spent. */
   cursor: string | null
+  /** Batches imported. A batch is one read of the source — `batchSize`
+   * documents, converted and imported together, and the whole of what this
+   * chunk holds in memory at once. It is the unit every budget counts:
+   * `maxBatches` here, `MAX_BATCHES_PER_CHUNK` and the run's `numBatches` in
+   * ./backfillRun.ts. */
   batches: number
   documents: number
   convertFailures: number
+  /** Serialized size of everything this chunk imported, across every batch. */
+  bytes: number
+  /** The largest single batch in this chunk. A batch is what sits in memory at
+   * once, so this — not the chunk total — is the number to read when choosing a
+   * config's `batchSize`. */
+  peakBatchBytes: number
+  /** Highest resident memory seen after importing a batch, before the forced
+   * collection. This is the figure the container kills on. */
+  peakRssBytes: number
+  /** Highest resident memory seen after a forced collection. Flat across
+   * batches means the collection reclaims what a batch allocates; climbing
+   * means something is retained between batches. All four figures are logged
+   * rather than persisted: the run's `Totals` are a checkpoint a replayed
+   * chunk must reproduce exactly. */
+  peakRssAfterGcBytes: number
 }
 
 /** The id of a failed import's `document`, which the server echoes back as the
@@ -47,9 +71,9 @@ const failedDocumentId = (document: unknown): string | undefined => {
 }
 
 export class SearchIndexer {
-  /** How many source documents to read per Firestore page. Independent of the
-   * import payload, which `importInSlices` sizes by bytes. */
-  private readonly batchSize = 250
+  /** How many source documents to read per batch. Independent of the import
+   * payload, which `importBatch` sizes by bytes. */
+  private readonly batchSize: number
   private readonly client = createClient()
   private readonly collectionName: string
 
@@ -57,6 +81,17 @@ export class SearchIndexer {
 
   constructor(private readonly config: CollectionConfig) {
     this.collectionName = searchCollectionName(config)
+    const batchSize = config.batchSize ?? DEFAULT_BATCH_SIZE
+    // Rejected loudly rather than passed to `limit()`: a zero or fractional
+    // batch size makes the first batch come back empty, which `listBatch`
+    // reports
+    // as a null cursor, which the run reads as "source exhausted" — so the
+    // alias would be swapped onto an empty collection and the live one dropped.
+    if (!Number.isInteger(batchSize) || batchSize < 1)
+      throw Error(
+        `Invalid batchSize ${batchSize} for search config ${config.alias}`
+      )
+    this.batchSize = batchSize
   }
 
   private passesFilter(data: DocumentData | undefined) {
@@ -174,59 +209,99 @@ export class SearchIndexer {
     maxBatches?: number
     budgetMs: number
   }): Promise<BackfillChunkResult> {
-    const { convert } = this.config
     const deadline = Date.now() + budgetMs
     let cursor: string | null = startAfter
     let batches = 0
     let documents = 0
     let convertFailures = 0
+    let bytes = 0
+    let peakBatchBytes = 0
+    let peakRssBytes = 0
+    let peakRssAfterGcBytes = 0
 
     while (maxBatches === undefined || batches < maxBatches) {
-      // Checked after the first page so a chunk always makes progress, however
+      // Checked after the first batch so a chunk always makes progress, however
       // little budget it inherited.
       if (batches > 0 && Date.now() >= deadline) break
 
-      const page = await this.listPage(cursor)
-      cursor = page.cursor
+      const batch = await this.listBatch(cursor)
+      cursor = batch.cursor
 
-      if (page.docs.length) {
+      if (batch.docs.length) {
         batches++
-        const docs = page.docs.reduce((acc, d) => {
-          try {
-            const data = d.data()
-            if (!this.passesFilter(data)) return acc
-            acc.push(convert(data))
-          } catch (error: any) {
-            convertFailures++
-            console.error(`Failed to convert document: ${error.message}`)
-          }
-          return acc
-        }, [] as any[])
+        const imported = await this.importBatch(batch.docs)
+        documents += imported.documents
+        convertFailures += imported.convertFailures
+        bytes += imported.bytes
+        peakBatchBytes = Math.max(peakBatchBytes, imported.bytes)
 
-        await this.importInSlices(docs)
-        documents += docs.length
+        // Reclaim the batch before fetching the next one — see ./forceGc.ts.
+        // Dropping the snapshots first is what makes that possible: `batch` is
+        // still a live local in this frame, so a collection while it holds them
+        // would reclaim only the PREVIOUS batch and leave this one resident,
+        // both raising the real footprint to two batches and putting a batch's
+        // worth of noise into the after-gc figure below.
+        peakRssBytes = Math.max(peakRssBytes, process.memoryUsage.rss())
+        batch.docs.length = 0
+        forceGc()
+        peakRssAfterGcBytes = Math.max(
+          peakRssAfterGcBytes,
+          process.memoryUsage.rss()
+        )
       }
 
       if (cursor === null) break
     }
 
-    return { cursor, batches, documents, convertFailures }
+    return {
+      cursor,
+      batches,
+      documents,
+      convertFailures,
+      bytes,
+      peakBatchBytes,
+      peakRssBytes,
+      peakRssAfterGcBytes
+    }
   }
 
-  private async importInSlices(docs: any[]) {
-    if (!docs.length) return
+  /** Converts and imports one batch of snapshots, splitting the import into
+   * request-sized slices. Each document is converted, serialized and dropped in
+   * the same iteration, so the converted batch never exists as a whole: what is
+   * live at once is the snapshots plus at most one slice of lines. */
+  private async importBatch(snapshots: QueryDocumentSnapshot[]) {
+    const { convert } = this.config
     const collection = await this.getCollection()
     let slice: string[] = []
+    let sliceBytes = 0
+    let documents = 0
+    let convertFailures = 0
     let bytes = 0
 
+    // Releases the line array before the round trip: the joined body is the
+    // copy that ships, and reassigning the captured `let` is what frees this one.
     const flush = async () => {
       if (!slice.length) return
-      await this.importDocuments(collection, slice)
+      const body = slice.join("\n")
+      bytes += sliceBytes
       slice = []
-      bytes = 0
+      sliceBytes = 0
+      await this.importDocuments(collection, body)
     }
 
-    for (const doc of docs) {
+    for (const snapshot of snapshots) {
+      let doc: any
+      try {
+        const data = snapshot.data()
+        if (!this.passesFilter(data)) continue
+        doc = convert(data)
+      } catch (error: any) {
+        convertFailures++
+        console.error(`Failed to convert document: ${error.message}`)
+        continue
+      }
+      documents++
+
       // Serialized once, here: the same line is measured against the budget
       // and shipped as the import body, rather than stringified a second time
       // inside the client. Bytes, not string length: the cap is on the encoded
@@ -234,25 +309,26 @@ export class SearchIndexer {
       // non-ASCII. +1 for the JSONL newline.
       const line = JSON.stringify(doc)
       const size = Buffer.byteLength(line) + 1
-      if (slice.length && bytes + size > IMPORT_BYTE_BUDGET) await flush()
+      if (slice.length && sliceBytes + size > IMPORT_BYTE_BUDGET) await flush()
       slice.push(line)
-      bytes += size
+      sliceBytes += size
     }
     await flush()
+    return { documents, convertFailures, bytes }
   }
 
   /** Imports pre-serialized JSONL lines. The client's string form returns the
    * raw per-line results WITHOUT throwing ImportError — only its array form
    * does — so failures are detected here, and must be: a silently rejected
-   * batch would otherwise count as progress. */
-  private async importDocuments(collection: Collection, lines: string[]) {
+   * slice would otherwise count as progress. */
+  private async importDocuments(collection: Collection, body: string) {
     const response = await collection
       .documents()
-      .import(lines.join("\n"), { action: "upsert" })
-    const failures = String(response)
+      .import(body, { action: "upsert" })
+    const results = String(response)
       .split("\n")
       .map(line => JSON.parse(line))
-      .filter(r => r.success === false)
+    const failures = results.filter(r => r.success === false)
     if (failures.length) {
       console.error(
         failures.map(r => ({
@@ -262,7 +338,7 @@ export class SearchIndexer {
         }))
       )
       throw Error(
-        `${failures.length} of ${lines.length} documents failed to import`
+        `${failures.length} of ${results.length} documents failed to import`
       )
     }
   }
@@ -289,8 +365,8 @@ export class SearchIndexer {
     }
   }
 
-  /** One ordered page of the source, with the cursor to resume after it — null
-   * once the source is exhausted, which a short page already tells us.
+  /** One ordered batch of the source, with the cursor to resume after it —
+   * null once the source is exhausted, which a short batch already tells us.
    *
    * Ordered by document name, with the last document's path as the cursor: the
    * one ordering Firestore always serves without an index, and the one value
@@ -298,10 +374,10 @@ export class SearchIndexer {
    * Ordering by `idField` instead would make the persisted value-cursor skip
    * documents — Firestore positions a value cursor after ALL documents equal
    * to it, and bills' collectionGroup holds the same bill number once per
-   * general court, adjacent in that ordering, so page boundaries would
+   * general court, adjacent in that ordering, so batch boundaries would
    * silently drop the rest of a boundary-straddling group from the index.
    */
-  private async listPage(startAfter: string | null): Promise<{
+  private async listBatch(startAfter: string | null): Promise<{
     docs: QueryDocumentSnapshot[]
     cursor: string | null
   }> {
