@@ -43,7 +43,7 @@ export const script: Script = async ({ args }) => {
   // document-name tiebreak, where a value cursor positions after ALL documents
   // equal to it — and bill numbers repeat across courts in the bills
   // collection group, so a value cursor would silently drop the rest of a
-  // boundary-straddling group (the same hazard SearchIndexer.listPage
+  // boundary-straddling group (the same hazard SearchIndexer.listBatch
   // documents).
   let cursor: QueryDocumentSnapshot | undefined
   for (;;) {
