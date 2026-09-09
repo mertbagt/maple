@@ -1,10 +1,16 @@
 import { useTranslation } from "next-i18next"
+import { useMemo } from "react"
 import styled from "styled-components"
 
 import { Col } from "../../bootstrap"
 import { SidebarBlock, SidebarLink, SidebarTitle } from "../LegislatorSidebar"
 
 import { usePublishedTestimonyListing } from "components/db"
+
+import { shuffleArray } from "../LegislatorComponents"
+
+import styles from "./OtherTestimony.module.css"
+import { random } from "lodash"
 
 const TestimonyBlock = styled.div`
   background: #f8f9fa;
@@ -89,38 +95,60 @@ const TestimonyText = styled.div`
   margin-bottom: 3px;
 `
 
-export function OtherTestimony({
+export const OtherTestimony = ({
   court,
   sponsoredBills
 }: {
   court: number
   sponsoredBills: any[]
-}) {
+}) => {
   const { t } = useTranslation("legislators")
 
-  const testimonyOnLegislatorBills: any[] = []
+  const randomBills: any[] = shuffleArray(sponsoredBills)
 
-  sponsoredBills.forEach(bill => {
-    const data = usePublishedTestimonyListing({
-      billId: bill,
-      court: court
-    })
+  return (
+    <SidebarBlock className="mb-2">
+      <SidebarTitle className={`my-1`}>{t("otherTestimony")}</SidebarTitle>
+      {randomBills.map(bill => (
+        <BillTestimonyList key={bill} billId={bill} court={court} />
+      ))}
+      <Col>
+        <TestimonyBorder />
+        <SidebarLink href="/testimony">
+          {t("viewAllTestimony")}
+          {" ↗"}
+        </SidebarLink>
+      </Col>
+    </SidebarBlock>
+  )
+}
 
-    data.items.result?.length
-      ? testimonyOnLegislatorBills.push(
-          ...data.items.result
-            .sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-            .slice(0, 3)
-        )
-      : null
-  })
+const BillTestimonyList = ({
+  billId,
+  court
+}: {
+  billId: string
+  court: number
+}) => {
+  const { t } = useTranslation("legislators")
 
-  testimonyOnLegislatorBills
-    .sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-    .slice(0, 3)
+  const data = usePublishedTestimonyListing({ billId, court })
+  const length = data?.items?.result?.length ?? 0
+  const hasData = length > 0
+
+  const topTestimonies = useMemo(() => {
+    return data?.items?.result
+      ? [...data.items.result]
+          .sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+          .slice(0, 1)
+      : []
+  }, [data])
+
+  if (!hasData)
+    return <div className="billTestimonyEmpty" style={{ display: "none" }} />
 
   /* formatted Testimony On Legislator Bills */
-  const formattedTOLB = testimonyOnLegislatorBills.map(obj => {
+  const formattedTOLB = topTestimonies.map(obj => {
     const date = new Date(obj.updatedAt.toMillis())
 
     const monthYear = date.toLocaleString("en-US", {
@@ -136,8 +164,7 @@ export function OtherTestimony({
   })
 
   return (
-    <SidebarBlock className="mb-2">
-      <SidebarTitle className={`my-1`}>{t("otherTestimony")}</SidebarTitle>
+    <div className={styles.billTestimonyCard}>
       {formattedTOLB ? (
         <>
           {formattedTOLB.map(t => (
@@ -154,13 +181,6 @@ export function OtherTestimony({
       ) : (
         <div>{t("noTestimony")}</div>
       )}
-      <Col>
-        <TestimonyBorder />
-        <SidebarLink href="/testimony">
-          {t("viewAllTestimony")}
-          {" ↗"}
-        </SidebarLink>
-      </Col>
-    </SidebarBlock>
+    </div>
   )
 }
