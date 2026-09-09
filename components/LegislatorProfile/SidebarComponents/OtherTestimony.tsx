@@ -104,7 +104,7 @@ export const OtherTestimony = ({
 }) => {
   const { t } = useTranslation("legislators")
 
-  const randomBills: any[] = shuffleArray(sponsoredBills).slice(0, 10)
+  const randomBills: any[] = shuffleArray(sponsoredBills)
 
   return (
     <SidebarBlock className="mb-2">
