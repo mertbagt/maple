@@ -3,14 +3,12 @@ import { useMemo } from "react"
 import styled from "styled-components"
 
 import { Col } from "../../bootstrap"
+import { shuffleArray } from "../LegislatorComponents"
 import { SidebarBlock, SidebarLink, SidebarTitle } from "../LegislatorSidebar"
 
-import { usePublishedTestimonyListing } from "components/db"
-
-import { shuffleArray } from "../LegislatorComponents"
-
 import styles from "./OtherTestimony.module.css"
-import { random } from "lodash"
+
+import { usePublishedTestimonyListing } from "components/db"
 
 const TestimonyBlock = styled.div`
   background: #f8f9fa;
